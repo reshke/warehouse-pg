@@ -2539,9 +2539,15 @@ GetSnapshotData(Snapshot snapshot, DtxContext distributedTransactionContext)
 			globalxmin = DistributedLog_GetOldestXmin(globalxmin);
 	}
 
+	/*
+	 * DistributedLogShared->oldestXmin is maintained outside ProcArrayLock.
+	 * Another backend can advance it beyond xmin after this snapshot computes
+	 * xmin, so globalxmin can transiently be greater than xmin.  Keep the
+	 * horizon conservative in that case.  Clamping to xmin is safe because
+	 * tuples visible to this snapshot cannot be removed before xmin.
+	 */
 	if (TransactionIdFollows(globalxmin, xmin))
-		elog(ERROR, "global xmin (%u) is higher than transaction xmin (%u)",
-			globalxmin, xmin);
+		globalxmin = xmin;
 
 	/* Update global variables too */
 	RecentGlobalXmin = globalxmin - vacuum_defer_cleanup_age;
